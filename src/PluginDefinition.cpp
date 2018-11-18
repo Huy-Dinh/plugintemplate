@@ -17,6 +17,9 @@
 
 #include "PluginDefinition.h"
 #include "menuCmdID.h"
+#include <string>
+
+using namespace std;
 
 //
 // The plugin data that Notepad++ needs
@@ -58,7 +61,7 @@ void commandMenuInit()
     //            ShortcutKey *shortcut,          // optional. Define a shortcut to trigger this command
     //            bool check0nInit                // optional. Make this menu item be checked visually
     //            );
-    setCommand(0, TEXT("Hello Notepad++"), hello, NULL, false);
+    setCommand(0, TEXT("Convert to NMEA"), hello, NULL, false);
     setCommand(1, TEXT("Hello (with dialog)"), helloDlg, NULL, false);
 }
 
@@ -95,19 +98,41 @@ bool setCommand(size_t index, TCHAR *cmdName, PFUNCPLUGINCMD pFunc, ShortcutKey 
 //----------------------------------------------//
 void hello()
 {
+	char *abc = NULL;
+	int length;
+	// Get the current scintilla
+	int which = -1;
+	::SendMessage(nppData._nppHandle, NPPM_GETCURRENTSCINTILLA, 0, (LPARAM)&which);
+	if (which == -1)
+		return;
+	HWND curScintilla = (which == 0) ? nppData._scintillaMainHandle : nppData._scintillaSecondHandle;
+
+	length = (int) ::SendMessage(curScintilla, SCI_GETLENGTH, 0, 0);
+	abc = new char[length + 1];
+	::SendMessage(curScintilla, SCI_GETTEXT, length, (LPARAM)abc);
+
+	// Select all contents of the file
+	::SendMessage(nppData._nppHandle, NPPM_MENUCOMMAND, 0, IDM_EDIT_SELECTALL);
+	::SendMessage(nppData._nppHandle, NPPM_MENUCOMMAND, 0, IDM_EDIT_COPY);
     // Open a new document
     ::SendMessage(nppData._nppHandle, NPPM_MENUCOMMAND, 0, IDM_FILE_NEW);
 
     // Get the current scintilla
-    int which = -1;
+    which = -1;
     ::SendMessage(nppData._nppHandle, NPPM_GETCURRENTSCINTILLA, 0, (LPARAM)&which);
     if (which == -1)
         return;
-    HWND curScintilla = (which == 0)?nppData._scintillaMainHandle:nppData._scintillaSecondHandle;
+    curScintilla = (which == 0)?nppData._scintillaMainHandle:nppData._scintillaSecondHandle;
 
     // Say hello now :
     // Scintilla control has no Unicode mode, so we use (char *) here
-    ::SendMessage(curScintilla, SCI_SETTEXT, 0, (LPARAM)"Hello, Notepad++!");
+    //::SendMessage(curScintilla, SCI_SETTEXT, 0, (LPARAM)"Hello, Notepad++!");
+
+	//::SendMessage(nppData._nppHandle, NPPM_MENUCOMMAND, 0, IDM_EDIT_PASTE);
+	//::SendMessage(nppData._nppHandle, NPPM_MENUCOMMAND, 0, IDM_EDIT_PASTE);
+	abc[0] = 'x';
+	::SendMessage(curScintilla, SCI_SETTEXT, 0, (LPARAM)abc);
+	delete[] abc;
 }
 
 void helloDlg()
