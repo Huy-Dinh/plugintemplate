@@ -93,12 +93,48 @@ bool setCommand(size_t index, TCHAR *cmdName, PFUNCPLUGINCMD pFunc, ShortcutKey 
     return true;
 }
 
+#define NUMBER_OF_NMEA_SENTENCE		3
+#define ENDING_CHARACTER			-61
+std::string nmeaSentences[NUMBER_OF_NMEA_SENTENCE] =
+{
+	"GPGGA",
+	"GPGLL",
+	"GPGSA"
+};
+
+size_t positionOfNextSentence(std::string& inputString, size_t lastPosition)
+{
+	size_t beginPosition = lastPosition + 1;
+	size_t nextSentencePosition = inputString.find(nmeaSentences[0], beginPosition);
+	for (int i = 1; i < NUMBER_OF_NMEA_SENTENCE; ++i)
+	{
+		size_t currentPosition = inputString.find(nmeaSentences[i], beginPosition);
+		if (currentPosition < nextSentencePosition)
+		{
+			nextSentencePosition = currentPosition;
+		}
+	}
+	return nextSentencePosition;
+}
+
+size_t getSentenceSize(std::string& inputString, size_t startPosition)
+{
+	for (size_t i = startPosition; i < inputString.length(); ++i)
+	{
+		if (inputString.c_str()[i] == ENDING_CHARACTER)
+		{
+			return i - startPosition;
+		}
+	}
+	return inputString.length() - startPosition;
+}
+
 //----------------------------------------------//
 //-- STEP 4. DEFINE YOUR ASSOCIATED FUNCTIONS --//
 //----------------------------------------------//
 void hello()
 {
-	char *abc = NULL;
+	char *lastDocCharArray = NULL;
 	int length;
 	// Get the current scintilla
 	int which = -1;
@@ -107,32 +143,33 @@ void hello()
 		return;
 	HWND curScintilla = (which == 0) ? nppData._scintillaMainHandle : nppData._scintillaSecondHandle;
 
+	// Get the contents from the source file in to a string
 	length = (int) ::SendMessage(curScintilla, SCI_GETLENGTH, 0, 0);
-	abc = new char[length + 1];
-	::SendMessage(curScintilla, SCI_GETTEXT, length, (LPARAM)abc);
+	lastDocCharArray = new char[length + 1];
+	::SendMessage(curScintilla, SCI_GETTEXT, length, (LPARAM)lastDocCharArray);
+	std::string lastDocString(lastDocCharArray);
+	delete[] lastDocCharArray;
 
-	// Select all contents of the file
-	::SendMessage(nppData._nppHandle, NPPM_MENUCOMMAND, 0, IDM_EDIT_SELECTALL);
-	::SendMessage(nppData._nppHandle, NPPM_MENUCOMMAND, 0, IDM_EDIT_COPY);
-    // Open a new document
-    ::SendMessage(nppData._nppHandle, NPPM_MENUCOMMAND, 0, IDM_FILE_NEW);
+	// Converted NMEA string
+	std::string nmeaString = "";
+	// Open a new document
+	::SendMessage(nppData._nppHandle, NPPM_MENUCOMMAND, 0, IDM_FILE_NEW);
+	// Get the current scintilla
+	which = -1;
+	::SendMessage(nppData._nppHandle, NPPM_GETCURRENTSCINTILLA, 0, (LPARAM)&which);
+	if (which == -1)
+		return;
+	curScintilla = (which == 0) ? nppData._scintillaMainHandle : nppData._scintillaSecondHandle;
 
-    // Get the current scintilla
-    which = -1;
-    ::SendMessage(nppData._nppHandle, NPPM_GETCURRENTSCINTILLA, 0, (LPARAM)&which);
-    if (which == -1)
-        return;
-    curScintilla = (which == 0)?nppData._scintillaMainHandle:nppData._scintillaSecondHandle;
-
-    // Say hello now :
-    // Scintilla control has no Unicode mode, so we use (char *) here
-    //::SendMessage(curScintilla, SCI_SETTEXT, 0, (LPARAM)"Hello, Notepad++!");
-
-	//::SendMessage(nppData._nppHandle, NPPM_MENUCOMMAND, 0, IDM_EDIT_PASTE);
-	//::SendMessage(nppData._nppHandle, NPPM_MENUCOMMAND, 0, IDM_EDIT_PASTE);
-	abc[0] = 'x';
-	::SendMessage(curScintilla, SCI_SETTEXT, 0, (LPARAM)abc);
-	delete[] abc;
+	size_t startingPosition = positionOfNextSentence(lastDocString, 0);
+	while (startingPosition != std::string::npos)
+	{
+		size_t lengthOfSentence = getSentenceSize(lastDocString, startingPosition);
+		nmeaString += lastDocString.substr(startingPosition, lengthOfSentence);
+		nmeaString += "\n";
+		startingPosition = positionOfNextSentence(lastDocString, startingPosition);
+	}
+	::SendMessage(curScintilla, SCI_SETTEXT, 0, (LPARAM)nmeaString.c_str());
 }
 
 void helloDlg()
