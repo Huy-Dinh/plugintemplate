@@ -18,6 +18,10 @@
 #include "PluginDefinition.h"
 #include "menuCmdID.h"
 #include <string>
+#include <iostream>
+#include <vector>
+#include <fstream>
+#include <algorithm>
 
 using namespace std;
 
@@ -93,22 +97,16 @@ bool setCommand(size_t index, TCHAR *cmdName, PFUNCPLUGINCMD pFunc, ShortcutKey 
     return true;
 }
 
-#define NUMBER_OF_NMEA_SENTENCE		3
+#define CONFIG_FILE					"plugins\\eBikeParser\\parser_config"
 #define ENDING_CHARACTER			-61
-std::string nmeaSentences[NUMBER_OF_NMEA_SENTENCE] =
-{
-	"GPGGA",
-	"GPGLL",
-	"GPGSA"
-};
 
-size_t positionOfNextSentence(std::string& inputString, size_t lastPosition)
+size_t positionOfNextSentence(std::string& inputString, size_t lastPosition, vector<std::string> & inputSentenceVector)
 {
 	size_t beginPosition = lastPosition + 1;
-	size_t nextSentencePosition = inputString.find(nmeaSentences[0], beginPosition);
-	for (int i = 1; i < NUMBER_OF_NMEA_SENTENCE; ++i)
+	size_t nextSentencePosition = inputString.find(inputSentenceVector[0], beginPosition);
+	for (unsigned int i = 1; i < inputSentenceVector.size(); ++i)
 	{
-		size_t currentPosition = inputString.find(nmeaSentences[i], beginPosition);
+		size_t currentPosition = inputString.find(inputSentenceVector[i], beginPosition);
 		if (currentPosition < nextSentencePosition)
 		{
 			nextSentencePosition = currentPosition;
@@ -136,6 +134,21 @@ void hello()
 {
 	char *lastDocCharArray = NULL;
 	int length;
+	vector<std::string> vectorOfNMEASentences;
+	ifstream configFileStream;
+	configFileStream.open(CONFIG_FILE);
+	if (!configFileStream.is_open())
+	{
+		::MessageBox(NULL, TEXT("The parser could not open the config file"), TEXT("ERROR"), MB_OK);
+		return;
+	}
+	std::string currentNMEASentence;
+	while (std::getline(configFileStream, currentNMEASentence))
+	{
+		currentNMEASentence.erase(std::remove(currentNMEASentence.begin(), currentNMEASentence.end(), '\r'), currentNMEASentence.end());
+		currentNMEASentence.erase(std::remove(currentNMEASentence.begin(), currentNMEASentence.end(), '\n'), currentNMEASentence.end());
+		vectorOfNMEASentences.push_back(currentNMEASentence);
+	}
 	// Get the current scintilla
 	int which = -1;
 	::SendMessage(nppData._nppHandle, NPPM_GETCURRENTSCINTILLA, 0, (LPARAM)&which);
@@ -161,13 +174,13 @@ void hello()
 		return;
 	curScintilla = (which == 0) ? nppData._scintillaMainHandle : nppData._scintillaSecondHandle;
 
-	size_t startingPosition = positionOfNextSentence(lastDocString, 0);
+	size_t startingPosition = positionOfNextSentence(lastDocString, 0, vectorOfNMEASentences);
 	while (startingPosition != std::string::npos)
 	{
 		size_t lengthOfSentence = getSentenceSize(lastDocString, startingPosition);
 		nmeaString += lastDocString.substr(startingPosition, lengthOfSentence);
 		nmeaString += "\n";
-		startingPosition = positionOfNextSentence(lastDocString, startingPosition);
+		startingPosition = positionOfNextSentence(lastDocString, startingPosition, vectorOfNMEASentences);
 	}
 	::SendMessage(curScintilla, SCI_SETTEXT, 0, (LPARAM)nmeaString.c_str());
 }
