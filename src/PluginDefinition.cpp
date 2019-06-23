@@ -98,15 +98,43 @@ bool setCommand(size_t index, TCHAR *cmdName, PFUNCPLUGINCMD pFunc, ShortcutKey 
 }
 
 #define CONFIG_FILE					"plugins\\eBikeParser\\parser_config"
-#define ENDING_CHARACTER			-61
+#define ENDING_CHARACTER			(0xfa)
 
 size_t positionOfNextSentence(std::string& inputString, size_t lastPosition, vector<std::string> & inputSentenceVector)
 {
 	size_t beginPosition = lastPosition + 1;
-	size_t nextSentencePosition = inputString.find(inputSentenceVector[0], beginPosition);
+	size_t nextSentencePosition = std::string::npos;
+
+	for (unsigned int i = 0; i < inputSentenceVector.size(); ++i)
+	{
+		size_t currentFirstPosition = inputString.find(inputSentenceVector[i], beginPosition);
+		if (currentFirstPosition == std::string::npos)
+		{
+			inputSentenceVector.erase(inputSentenceVector.begin() + i);
+			--i;
+			continue;
+		}
+		else
+		{
+			nextSentencePosition = currentFirstPosition;
+			break;
+		}
+	}
 	for (unsigned int i = 1; i < inputSentenceVector.size(); ++i)
 	{
 		size_t currentPosition = inputString.find(inputSentenceVector[i], beginPosition);
+		// If a message header is no longer found, remove it from the vector 
+		// to prevent it from being searched again, could improve performance
+		if (currentPosition == std::string::npos)
+		{
+			inputSentenceVector.erase(inputSentenceVector.begin() + i);
+			// Since the last header is removed from the vector, the next index should be the same
+			// therefore it is decreased here before being incremented by the for loop at the next iteration
+			--i;
+			continue;
+		}
+		// This is only reached if currentPosition != npos
+		// We can do the comparison here to find out which header is closer
 		if (currentPosition < nextSentencePosition)
 		{
 			nextSentencePosition = currentPosition;
@@ -115,11 +143,26 @@ size_t positionOfNextSentence(std::string& inputString, size_t lastPosition, vec
 	return nextSentencePosition;
 }
 
+bool isValidMsgChar(unsigned char inputChar)
+{
+	if ((inputChar == '.') || (inputChar == ','))
+	{
+		return true;
+	}
+	else if (((inputChar >= 'a') && (inputChar <= 'z'))
+			|| ((inputChar >= '0') && (inputChar <= '9'))
+			|| ((inputChar >= 'A') && (inputChar <= 'Z')))
+	{
+		return true;
+	}
+	return false;
+}
+
 size_t getSentenceSize(std::string& inputString, size_t startPosition)
 {
 	for (size_t i = startPosition; i < inputString.length(); ++i)
 	{
-		if (inputString.c_str()[i] == ENDING_CHARACTER)
+		if (!isValidMsgChar((unsigned char) (inputString.c_str()[i])))
 		{
 			return i - startPosition;
 		}
@@ -147,7 +190,8 @@ void hello()
 	{
 		currentNMEASentence.erase(std::remove(currentNMEASentence.begin(), currentNMEASentence.end(), '\r'), currentNMEASentence.end());
 		currentNMEASentence.erase(std::remove(currentNMEASentence.begin(), currentNMEASentence.end(), '\n'), currentNMEASentence.end());
-		vectorOfNMEASentences.push_back(currentNMEASentence);
+		if (currentNMEASentence.length() > 3)
+			vectorOfNMEASentences.push_back(currentNMEASentence);
 	}
 	// Get the current scintilla
 	int which = -1;
@@ -160,6 +204,16 @@ void hello()
 	length = (int) ::SendMessage(curScintilla, SCI_GETLENGTH, 0, 0);
 	lastDocCharArray = new char[length + 1];
 	::SendMessage(curScintilla, SCI_GETTEXT, length, (LPARAM)lastDocCharArray);
+
+	// Clean the charArray of any 0 in the middle
+	for (int i = 0; i < length; ++i)
+	{
+		if (lastDocCharArray[i] == 0)
+		{
+			lastDocCharArray[i] = 1;
+		}
+	}
+
 	std::string lastDocString(lastDocCharArray);
 	delete[] lastDocCharArray;
 
@@ -178,7 +232,7 @@ void hello()
 	while (startingPosition != std::string::npos)
 	{
 		size_t lengthOfSentence = getSentenceSize(lastDocString, startingPosition);
-		nmeaString += lastDocString.substr(startingPosition, lengthOfSentence);
+		nmeaString += "$" + lastDocString.substr(startingPosition, lengthOfSentence);
 		nmeaString += "\n";
 		startingPosition = positionOfNextSentence(lastDocString, startingPosition, vectorOfNMEASentences);
 	}
